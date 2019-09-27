@@ -389,7 +389,7 @@ save_bottleneck_features(location)
 # In[86]:
 
 
-# d1a_model1, d1a_history1 = train_binary_model()
+d1a_model1, d1a_history1 = train_binary_model()
 
 
 # In[134]:
