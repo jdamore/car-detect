@@ -596,14 +596,14 @@ def evaluate_binary_model(model, directory, labels):
 # In[16]:
 
 
-plot_acc_metrics(top_history, ft_history)
+# plot_acc_metrics(top_history, ft_history)
 
 
 # In[22]:
 
 
 # WINNER
-plot_metrics(ft_history) # sgd with lr = 0.0001, sigmoid, with l2 = 0.001
+# plot_metrics(ft_history) # sgd with lr = 0.0001, sigmoid, with l2 = 0.001
 
 
 # In[18]:
