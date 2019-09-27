@@ -153,5 +153,7 @@ with open('cat_counter.pk', 'rb') as f:
 cat_list = [k for k, v in cat_counter.most_common()[:50]]
 
 get_available_gpus()
-print car_categories_gate('damaged_car.jpg', cat_list)
 print car_categories_gate('cat.jpg', cat_list)
+print car_categories_gate('damaged_car.jpg', cat_list)
+print car_categories_gate('damaged_car_2.jpg', cat_list)
+print car_categories_gate('damaged_car_3.jpg', cat_list)

@@ -454,5 +454,7 @@ cm = evaluate_binary_model(ft_model, validation_data_dir, validation_labels)
 # sns.heatmap(cm, annot=True, annot_kws={"size": 16},
             # fmt='g', cmap='Blues', xticklabels=heatmap_labels, yticklabels=heatmap_labels);
 
-car_categories_gate('damaged_car.jpg', ft_model)
 car_categories_gate('cat.jpg', ft_model)
+car_categories_gate('damaged_car.jpg', ft_model)
+car_categories_gate('damaged_car_2.jpg', ft_model)
+car_categories_gate('damaged_car_3.jpg', ft_model)
