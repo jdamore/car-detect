@@ -40,11 +40,19 @@ from keras.layers import Activation, Dropout, Flatten, Dense
 from keras.utils.np_utils import to_categorical
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint, History
+from tensorflow.python.client import device_lib
+
 
 
 
 CLASS_INDEX = None
 CLASS_INDEX_PATH = 'https://s3.amazonaws.com/deep-learning-models/image-models/imagenet_class_index.json'
+
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
 
 # from Keras GitHub
 def get_predictions(preds, top=5):
@@ -67,12 +75,14 @@ def get_predictions(preds, top=5):
         results.append(result)
     return results
 
+
 def prepare_image(img_path):
     img = load_img(img_path, target_size=(224, 224))
     x = img_to_array(img)
     x = np.expand_dims(x, axis=0)
     x = preprocess_input(x)
     return x
+
 
 def get_car_categories1():
     d = defaultdict(float)
@@ -119,7 +129,6 @@ def view_images(img_dir, img_list):
         else:
             return 'Finished for now.'
 
-
 def car_categories_gate(image_path, cat_list):
     # urllib.urlretrieve(image_path, 'save.jpg') # or other way to upload image
     img = prepare_image(image_path)
@@ -136,26 +145,13 @@ def car_categories_gate(image_path, cat_list):
 vgg16 = VGG16(weights='imagenet')
 vgg16.save('vgg16.h5')
 
-#image = prepare_image('data0/jeep.jpg')
-#preds = vgg16.predict(image)
-#print get_predictions(preds, top=5)
-
-
-#image = prepare_image('damaged_car.jpg')
-#preds = vgg16.predict(image)
-#print get_predictions(preds, top=5)
-
 cat_counter = get_car_categories1()
 with open('cat_counter.pk', 'wb') as f:
     pk.dump(cat_counter,f,-1)
 with open('cat_counter.pk', 'rb') as f:
     cat_counter = pk.load(f)
 cat_list = [k for k, v in cat_counter.most_common()[:50]]
-#number, bad_list = get_car_categories2(cat_list)
-#number2, bad_list2 = car_categories_gate(cat_list2)
-#number2, bad_list2 = car_categories_gat(cat_list2)
-#view_images('data0/', bad_list)
-#view_images('data0/', bad_list2)
 
+get_available_gpus()
 print car_categories_gate('damaged_car.jpg', cat_list)
 print car_categories_gate('cat.jpg', cat_list)
