@@ -1,1 +1,7 @@
 .DS_Store
+cat_counter.pk
+data1a/*.npy
+data1a/*.h5
+data1a/*.txt
+data1a_preview
+*.h5
