@@ -425,7 +425,7 @@ nb_validation_samples = sum(validation_samples)
 nb_epoch = 50
 
 # do not rerun!!
-if os.path.exists('bottleneck_features_train.npy') == False || os.path.exists('bottleneck_features_validation.npy'') == False:
+if (os.path.exists('bottleneck_features_train.npy') == False) or (os.path.exists('bottleneck_features_validation.npy') == False):
     save_bottleneck_features(location)
 
 if os.path.exists(top_model_weights_path) == False:
