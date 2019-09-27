@@ -371,8 +371,9 @@ def car_categories_gate(image_path, model):
     x = x.reshape((1,) + x.shape)/255 # this is a Numpy array with shape (1, 3, 256, 256)
     pred = model.predict(x)
     print "Validating that damage exists for ", image_path
+    print "Prediction ", pred
     print "Probability that the car is damaged ", pred[0][0]
-    if pred[0][0] <=.5:
+    if pred[0][0] >.5:
         print "Validation complete - proceed to location and severity determination"
     else:
         print "Are you sure that your car is damaged? Please submit another picture of the damage."
@@ -433,7 +434,7 @@ if os.path.exists(top_model_weights_path) == False:
 if os.path.exists(fine_tuned_model_path) == False:
     ft_model, ft_history = finetune_binary_model()
 
-ft_model = load_model(location+'/ft_model.h5')
+ft_model = load_model(fine_tuned_model_path)
 with open('data1a/top_history.txt') as f:
     top_history = json.load(f)
 with open('data1a/ft_history.txt') as f:
