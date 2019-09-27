@@ -380,23 +380,6 @@ def car_categories_gate(image_path, model):
         print "Hint: Try zooming in/out, using a different angle or different lighting"
 
 
-def get_edge_cases(model, directory, exp_result):
-    img_list = os.listdir(directory)
-    edge_list = []
-    for name in img_list:
-        img = load_img(directory+name, target_size=(256, 256)) # this is a PIL image
-        x = img_to_array(img) # this is a Numpy array with shape (3, 256, 256)
-        x = x.reshape((1,) + x.shape)/255 # this is a Numpy array with shape (1, 3, 256, 256)
-        pred_prob = model.predict(x)
-        if pred_prob <=0.5:
-            pred = 0
-        else:
-            pred = 1
-        if pred != exp_result:
-            edge_list.append(name)
-    return edge_list
-
-
 
 datagen = ImageDataGenerator(rotation_range=40,
                              width_shift_range=0.2,
@@ -423,13 +406,10 @@ for batch in datagen.flow(x, batch_size=1,
     if i > 30:
         break # otherwise the generator would loop indefinitely
 
-
-
 # path to the model weights file
 location = 'data1a'
-top_model_weights_path=location+'/top_model_weights.h5' # will be saved into when we create our model
-# model_path = location + '/initial_data2_model.h5'
-fine_tuned_model_path = location+'/ft_model.h5'
+top_model_weights_path = location + '/top_model_weights.h5' # will be saved into when we create our model
+fine_tuned_model_path = location + '/ft_model.h5'
 
 # dimensions of our images
 img_width, img_height = 256, 256
@@ -445,10 +425,14 @@ nb_validation_samples = sum(validation_samples)
 nb_epoch = 50
 
 # do not rerun!!
-# save_bottleneck_features(location)
+if os.path.exists('bottleneck_features_train.npy') == False || os.path.exists('bottleneck_features_validation.npy'') == False:
+    save_bottleneck_features(location)
 
-# d1a_model1, d1a_history1 = train_binary_model()
-# ft_model, ft_history = finetune_binary_model()
+if os.path.exists(top_model_weights_path) == False:
+    d1a_model1, d1a_history1 = train_binary_model()
+
+if os.path.exists(fine_tuned_model_path) == False:
+    ft_model, ft_history = finetune_binary_model()
 
 ft_model = load_model(location+'/ft_model.h5')
 with open('data1a/top_history.txt') as f:
@@ -463,18 +447,13 @@ validation_labels = np.array([0] * validation_samples[0] +
 
 cm = evaluate_binary_model(ft_model, validation_data_dir, validation_labels)
 
-heatmap_labels = ['Damaged', 'Whole']
+# heatmap_labels = ['Damaged', 'Whole']
 
-sns.heatmap(cm, annot=True, annot_kws={"size": 16},
-            fmt='g', cmap='OrRd', xticklabels=heatmap_labels, yticklabels=heatmap_labels);
+# sns.heatmap(cm, annot=True, annot_kws={"size": 16},
+            # fmt='g', cmap='OrRd', xticklabels=heatmap_labels, yticklabels=heatmap_labels);
 
-sns.heatmap(cm, annot=True, annot_kws={"size": 16},
-            fmt='g', cmap='Blues', xticklabels=heatmap_labels, yticklabels=heatmap_labels);
+# sns.heatmap(cm, annot=True, annot_kws={"size": 16},
+            # fmt='g', cmap='Blues', xticklabels=heatmap_labels, yticklabels=heatmap_labels);
 
 car_categories_gate('damaged_car.jpg', ft_model)
 car_categories_gate('cat.jpg', ft_model)
-
-evaluate_binary_model(ft_model, validation_data_dir, validation_labels)
-fp = get_edge_cases(ft_model, 'data1a/validation/00-damage/', 0)
-len(fp)
-fn = get_edge_cases(ft_model, 'data1a/validation/01-whole/', 1)
