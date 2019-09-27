@@ -455,6 +455,7 @@ cm = evaluate_binary_model(ft_model, validation_data_dir, validation_labels)
             # fmt='g', cmap='Blues', xticklabels=heatmap_labels, yticklabels=heatmap_labels);
 
 car_categories_gate('cat.jpg', ft_model)
+car_categories_gate('whole-car.jpg', ft_model)
 car_categories_gate('damaged_car.jpg', ft_model)
 car_categories_gate('damaged_car_2.jpg', ft_model)
 car_categories_gate('damaged_car_3.jpg', ft_model)
