@@ -82,7 +82,7 @@ def load_vgg16(weights_path='vgg16_weights.h5'):
     model.add(Convolution2D(512, 3, 3, activation='relu'))
     model.add(MaxPooling2D((2,2), strides=(2,2)))
 
-    # assert os.path.exists(weights_path), 'Model weights not found (see "weights_path")'
+    assert os.path.exists(weights_path), 'Model weights not found (see "weights_path")'
 
     if weights_path:
     # note: this chops off the last layers of VGG16
