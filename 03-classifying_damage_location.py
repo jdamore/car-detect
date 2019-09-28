@@ -1,9 +1,20 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ### data1a - whole cars vs. all damaged cars
+# ### data2a - 120416_0229
+# * re-run, trying regularization
+#
+# ### data2a - 120116_1200
+# * run with cleaned dataset, just on damage location, 256x256, ft 8 batch size, 88s per epoch, theano backend
+# * saved history, created metrics plots
+# * noted that rmsprop results in higher top layer accuracy for initial fit - closer to 70%
+# * loss: 0.6640 - acc: 0.7273 - val_loss: 0.5893 - val_acc: 0.7836
+#
+# ### data2 - 112916_1200
+# * run without discards, just on damage location 256x256, 16 batch size, 80s per epoch, theano backend
+# * loss: 0.6776 - acc: 0.7151 - val_loss: 0.7998 - val_acc: 0.6928
 
-# In[1]:
+# In[11]:
 
 
 import urllib
@@ -12,7 +23,6 @@ from collections import Counter
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-#get_ipython().magic(u'matplotlib inline')
 
 import json
 import numpy as np
@@ -31,7 +41,7 @@ import pandas as pd
 
 from keras.applications.vgg16 import VGG16
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img
-from keras.regularizers import l2, l1
+from keras.regularizers import l2, activity_l2, l1, activity_l1
 from keras.models import Sequential, load_model
 from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.layers import Activation, Dropout, Flatten, Dense
@@ -39,10 +49,16 @@ from keras.utils.np_utils import to_categorical
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint, History
 
+# only import if using tf backend
+# import tensorflow as tf
+# tf.python.control_flow_ops = tf
 
-def load_vgg16(weights_path='vgg16_weights.h5'):
+
+# In[3]:
+
+
+def load_vgg16(crop=True, weights_path='vgg16_weights.h5'):
     model = Sequential()
-    print img_width, img_height
     model.add(ZeroPadding2D((1,1),input_shape=(3, img_width, img_height)))
     model.add(Convolution2D(64, 3, 3, activation='relu'))
     model.add(ZeroPadding2D((1,1)))
@@ -79,16 +95,12 @@ def load_vgg16(weights_path='vgg16_weights.h5'):
     model.add(Convolution2D(512, 3, 3, activation='relu'))
     model.add(MaxPooling2D((2,2), strides=(2,2)))
 
-    assert os.path.exists(weights_path), 'Model weights not found (see "weights_path")'
+    # assert os.path.exists(weights_path), 'Model weights not found (see "weights_path")'
 
     if weights_path:
     # note: this chops off the last layers of VGG16
 
-    # loads the weights of the VGG16 networks
-    # note: when there is a complete match between model definition
-    # and your weights savefile, you can simply call model.load_weights(filename)
         f = h5py.File(weights_path)
-        print f
         for k in range(f.attrs['nb_layers']):
             if k >= len(model.layers):
                 # we don't look at the last (fully-connected) layers in the savefile
@@ -104,17 +116,19 @@ def load_vgg16(weights_path='vgg16_weights.h5'):
     return model
 
 
+# In[4]:
+
+
 def save_bottleneck_features(location):
     datagen = ImageDataGenerator(rescale=1./255)
 
-    model = load_vgg16()
+    model = load_vgg16(crop=True)
 
     generator = datagen.flow_from_directory(train_data_dir,
                                             target_size=(img_width, img_height),
-                                            batch_size=16,
+                                            batch_size=16, # reduced batch size to 16
                                             class_mode=None,
                                             shuffle=False)
-
     bottleneck_features_train = model.predict_generator(generator, nb_train_samples)
     np.save(open(location+'/bottleneck_features_train.npy', 'w'), bottleneck_features_train)
 
@@ -128,20 +142,31 @@ def save_bottleneck_features(location):
     np.save(open(location+'/bottleneck_features_validation.npy', 'w'), bottleneck_features_validation)
 
 
+# In[8]:
+
+
+def print_best_model_results(model_hist):
+    best_epoch = np.argmax(model_hist['val_acc'])
+    print 'epoch:', best_epoch+1,     ', val_acc:', model_hist['val_acc'][best_epoch],     ', val_loss:', model_hist['val_loss'][best_epoch]
+
+
+# In[6]:
+
+
 def plot_metrics(hist, stop=50):
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
 
     axes = axes.flatten()
 
-    axes[0].plot(range(stop), hist['acc'], label='Training', color='#FF533D')
-    axes[0].plot(range(stop), hist['val_acc'], label='Validation', color='#03507E')
+    axes[0].plot(range(stop), hist['acc'], label='Training')
+    axes[0].plot(range(stop), hist['val_acc'], label='Validation')
     axes[0].set_title('Accuracy')
     axes[0].set_ylabel('Accuracy')
     axes[0].set_xlabel('Epoch')
     axes[0].legend(loc='lower right')
 
-    axes[1].plot(range(stop), hist['loss'], label='Training', color='#FF533D')
-    axes[1].plot(range(stop), hist['val_loss'], label='Validation', color='#03507E')
+    axes[1].plot(range(stop), hist['loss'], label='Training')
+    axes[1].plot(range(stop), hist['val_loss'], label='Validation')
     axes[1].set_title('Loss')
     axes[1].set_ylabel('Loss')
     axes[1].set_xlabel('Epoch')
@@ -153,28 +178,39 @@ def plot_metrics(hist, stop=50):
     print_best_model_results(hist)
 
 
-def train_binary_model():
+# In[7]:
 
+
+# load saved data and train a small, fully-connected model
+def train_categorical_model():
+    # the features were saved in order, so recreating the labels is not hard
     train_data = np.load(open(location+'/bottleneck_features_train.npy'))
     train_labels = np.array([0] * train_samples[0] +
-                            [1] * train_samples[1])
+                            [1] * train_samples[1] +
+                            [2] * train_samples[2])
+    train_labels = to_categorical(train_labels)
 
     validation_data = np.load(open(location+'/bottleneck_features_validation.npy'))
     validation_labels = np.array([0] * validation_samples[0] +
-                                 [1] * validation_samples[1])
+                                 [1] * validation_samples[1] +
+                                 [2] * validation_samples[2])
+    validation_labels = to_categorical(validation_labels)
 
     model = Sequential()
     model.add(Flatten(input_shape=train_data.shape[1:])) # 512, 4, 4
     model.add(Dense(256, activation = 'relu', W_regularizer=l2(0.01)))
     model.add(Dropout(0.5))
-    model.add(Dense(1, activation = 'sigmoid')) # should activation be sigmoid for binary problem?
+    model.add(Dense(3, activation = 'softmax')) # upped to 3 and activation softmax
 
     model.compile(optimizers.SGD(lr=0.0001, momentum=0.9),
-              loss='binary_crossentropy', metrics=['accuracy'])
+              loss='categorical_crossentropy', metrics=['accuracy'])
 
+    # optimizer='rmsprop'
+    # optimizers.SGD(lr=0.0001, momentum=0.9)
 
     checkpoint = ModelCheckpoint(top_model_weights_path, monitor='val_acc',
                                  verbose=1, save_best_only=True, save_weights_only=True, mode='auto')
+
 
     fit = model.fit(train_data, train_labels,
               nb_epoch=nb_epoch, batch_size=16,
@@ -187,15 +223,19 @@ def train_binary_model():
     return model, fit.history
 
 
-def finetune_binary_model():
-    model = load_vgg16()
+# In[8]:
+
+
+def finetune_categorical_model():
+    # Build the VGG16 Network (again)
+    model = load_vgg16(crop=True)
 
     # build a classifier model to put on top of the convolutional model
     top_model = Sequential()
     top_model.add(Flatten(input_shape=model.output_shape[1:]))
     top_model.add(Dense(256, activation='relu', W_regularizer=l2(0.01)))
     top_model.add(Dropout(0.5))
-    top_model.add(Dense(1, activation='sigmoid'))
+    top_model.add(Dense(3, activation='softmax'))
 
     top_model.load_weights(top_model_weights_path) # load weights_path
 
@@ -207,9 +247,8 @@ def finetune_binary_model():
     for layer in model.layers[:25]:
         layer.trainable=False
 
-    # compile the model with a SGD/momentum optimizer
-    # and a very slow learning rate
-    model.compile(loss='binary_crossentropy',
+
+    model.compile(loss='categorical_crossentropy',
                  optimizer = optimizers.SGD(lr=0.00001, momentum=0.9), # reduced learning rate by 1/10
                   metrics=['accuracy'])
 
@@ -228,12 +267,12 @@ def finetune_binary_model():
     train_generator= train_datagen.flow_from_directory(train_data_dir,
                                                      target_size=(img_height, img_width),
                                                      batch_size=8,
-                                                     class_mode='binary')
+                                                     class_mode='categorical')
 
     validation_generator = test_datagen.flow_from_directory(validation_data_dir,
                                                            target_size=(img_height, img_width),
                                                            batch_size=8,
-                                                           class_mode='binary')
+                                                           class_mode='categorical')
 
 
     checkpoint = ModelCheckpoint(fine_tuned_model_path, monitor='val_acc',
@@ -241,98 +280,31 @@ def finetune_binary_model():
                                  save_weights_only=False, mode='auto')
     # fine-tune the model
     fit = model.fit_generator(train_generator,
-                              samples_per_epoch=nb_train_samples,
-                              nb_epoch=nb_epoch,
-                              validation_data=validation_generator,
-                              nb_val_samples=nb_validation_samples,
-                              verbose=1,
-                              callbacks=[checkpoint])
+                        samples_per_epoch=nb_train_samples,
+                        nb_epoch=nb_epoch,
+                        validation_data=validation_generator,
+                        nb_val_samples=nb_validation_samples,
+                        verbose=1,
+                        callbacks=[checkpoint])
 
-    with open(location+'/ft_history.txt', 'wb') as f:
+    with open(location+'/history.txt', 'wb') as f:
         json.dump(fit.history, f)
 
     return model, fit.history
 
 
-def view_images(img_dir, img_list):
-    for img in img_list:
-        clear_output()
-        plt.show(Image(img_dir+img))
-        num = raw_input("c to continue, q to quit")
-        if num == 'c':
-            pass
-        else:
-            return 'Finished for now.'
 
-
-def print_best_model_results(model_hist):
-    best_epoch = np.argmax(model_hist['val_acc'])
-    print 'epoch:', best_epoch+1,     ', val_acc:', model_hist['val_acc'][best_epoch],     ', val_loss:', model_hist['val_loss'][best_epoch]
-
-
-def plot_metrics(hist, stop=50):
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
-
-    axes = axes.flatten()
-
-    axes[0].plot(range(stop), hist['acc'], label='Training', color='#FF533D')
-    axes[0].plot(range(stop), hist['val_acc'], label='Validation', color='#03507E')
-    axes[0].set_title('Accuracy')
-    axes[0].set_ylabel('Accuracy')
-    axes[0].set_xlabel('Epoch')
-    axes[0].legend(loc='lower right')
-
-    axes[1].plot(range(stop), hist['loss'], label='Training', color='#FF533D')
-    axes[1].plot(range(stop), hist['val_loss'], label='Validation', color='#03507E')
-    axes[1].set_title('Loss')
-    axes[1].set_ylabel('Loss')
-    axes[1].set_xlabel('Epoch')
-    axes[1].legend(loc='upper right')
-
-    plt.tight_layout();
-
-    print "Best Model:"
-    print_best_model_results(hist)
-
-
-def plot_acc_metrics(hist1, hist2, stop=50):
-    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(4.25,6))
-
-    axes = axes.flatten()
-
-    axes[0].plot(range(stop), hist1['acc'], label='Training', color='#FF533D')
-    axes[0].plot(range(stop), hist1['val_acc'], label='Validation', color='#03507E')
-    axes[0].set_title('Training')
-    axes[0].set_ylabel('Accuracy')
-    axes[0].set_xlabel('Epoch')
-    axes[0].legend(loc='lower right')
-
-    axes[1].plot(range(stop), hist2['acc'], label='Training', color='#FF533D')
-    axes[1].plot(range(stop), hist2['val_acc'], label='Validation', color='#03507E')
-    axes[1].set_title('Fine-tuning')
-    axes[1].set_ylabel('Accuracy')
-    axes[1].set_xlabel('Epoch')
-    axes[1].legend(loc='lower right')
-
-    plt.tight_layout();
-
-
-
-def evaluate_binary_model(model, directory, labels):
+def evaluate_categorical_model(model, directory, labels):
     datagen = ImageDataGenerator(rescale=1./255)
 
     generator = datagen.flow_from_directory(directory,
                                 target_size=(img_height, img_width),
                                 batch_size=8,
-                                class_mode='binary', # categorical for multiclass
+                                class_mode='categorical',
                                 shuffle=False)
 
     predictions = model.predict_generator(generator, len(labels))
-
-    # use for multiclass
-    # pred_labels = np.argmax(predictions, axis=1)
-
-    pred_labels = [0 if i <0.5 else 1 for i in predictions]
+    pred_labels = np.argmax(predictions, axis=1)
 
     print ''
     print classification_report(validation_labels, pred_labels)
@@ -341,51 +313,26 @@ def evaluate_binary_model(model, directory, labels):
     return cm
 
 
-def car_categories_gate(image_path, model):
-    img = load_img(image_path, target_size=(256, 256)) # this is a PIL image
-    x = img_to_array(img) # this is a Numpy array with shape (3, 256, 256)
-    x = x.reshape((1,) + x.shape)/255 # this is a Numpy array with shape (1, 3, 256, 256)
-    pred = model.predict(x)
-    print "Validating that damage exists for ", image_path
-    print "Prediction ", pred
-    print "Probability that the car is damaged ", pred[0][0]
-    if pred[0][0] >.5:
-        print "Validation complete - proceed to location and severity determination"
-    else:
-        print "Are you sure that your car is damaged? Please submit another picture of the damage."
-        print "Hint: Try zooming in/out, using a different angle or different lighting"
+
+def view_images(img_dir, img_list):
+    for img in img_list:
+        clear_output()
+        display(Image(img_dir+img))
+        num = raw_input("c to continue, q to quit")
+        if num == 'c':
+            pass
+        else:
+            return 'Finished for now.'
 
 
+# ## Defining Inputs
 
-datagen = ImageDataGenerator(rotation_range=40,
-                             width_shift_range=0.2,
-                             height_shift_range=0.2,
-                             shear_range=0.2,
-                             zoom_range=0.2,
-                             horizontal_flip=True,
-                             fill_mode='nearest') # omitted rescaling to keep the images displayable
-
-img = load_img('data1a/training/00-damage/0001.JPEG') # this is a PIL image
-x = img_to_array(img) # this is a Numpy array with shape (3, 150, 150)
-x = x.reshape((1,) + x.shape) # this is a Numpy array with shape (1, 3, 150, 150)
-
-# the .flow() command below generates batches of randomly transformed images
-# and saves the results to the 'preview/' directory
-if os.path.exists('data1a_preview') == False:
-    os.makedirs('data1a_preview')
-
-i = 0
-for batch in datagen.flow(x, batch_size=1,
-                         save_to_dir='data1a_preview', save_prefix='damage_car',
-                         save_format='jpeg'):
-    i +=1
-    if i > 30:
-        break # otherwise the generator would loop indefinitely
 
 # path to the model weights file
-location = 'data1a'
-top_model_weights_path = location + '/top_model_weights.h5' # will be saved into when we create our model
-fine_tuned_model_path = location + '/ft_model.h5'
+location = 'data2a'
+top_model_weights_path=location+'/top_model_weights.h5' # will be saved into when we create our model
+# model_path = location + '/initial_data2_model.h5'
+fine_tuned_model_path = location+'/ft_model.h5'
 
 # dimensions of our images
 img_width, img_height = 256, 256
@@ -400,31 +347,44 @@ nb_validation_samples = sum(validation_samples)
 
 nb_epoch = 50
 
+
 # do not rerun!!
 if (os.path.exists(location+'bottleneck_features_train.npy') == False) or (os.path.exists(location+'bottleneck_features_validation.npy') == False):
     save_bottleneck_features(location)
 
-if os.path.exists(top_model_weights_path) == False:
-    d1a_model1, d1a_history1 = train_binary_model()
+d2_model, d2_history = train_categorical_model()
+ft_d2_model, ft_d2_history = finetune_categorical_model()
+ft_d2_model2 = load_model('data2a/ft_d2_model.h5')
 
-if os.path.exists(fine_tuned_model_path) == False:
-    ft_model, ft_history = finetune_binary_model()
+evaluate_model(ft_d2_model, validation_data_dir, validation_labels)
 
-ft_model = load_model(fine_tuned_model_path)
-with open('data1a/top_history.txt') as f:
+# In[13]:
+
+
+ft_model = load_model('data2a/ft_model.h5')
+
+
+# In[15]:
+
+
+with open('data2a/top_history.txt') as f:
     top_history = json.load(f)
-with open('data1a/ft_history.txt') as f:
+
+
+# In[16]:
+
+
+with open('data2a/ft_history.txt') as f:
     ft_history = json.load(f)
 
 
+# In[20]:
+
+
 validation_labels = np.array([0] * validation_samples[0] +
-                             [1] * validation_samples[1])
+                             [1] * validation_samples[1] +
+                             [2] * validation_samples[2])
 
 
-cm = evaluate_binary_model(ft_model, validation_data_dir, validation_labels)
 
-car_categories_gate('cat.jpg', ft_model)
-car_categories_gate('whole-car.jpg', ft_model)
-car_categories_gate('damaged_car.jpg', ft_model)
-car_categories_gate('damaged_car_2.jpg', ft_model)
-car_categories_gate('damaged_car_3.jpg', ft_model)
+cm = evaluate_categorical_model(ft_model, validation_data_dir, validation_labels)
