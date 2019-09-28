@@ -38,6 +38,12 @@ from keras.layers import Activation, Dropout, Flatten, Dense
 from keras.utils.np_utils import to_categorical
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint, History
+from tensorflow.python.client import device_lib
+
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 
 def load_vgg16(weights_path='vgg16_weights.h5'):
@@ -341,21 +347,31 @@ def evaluate_binary_model(model, directory, labels):
     return cm
 
 
-def car_categories_gate(image_path, model):
-    img = load_img(image_path, target_size=(256, 256)) # this is a PIL image
+def prepare_img_256(img_path):
+    img = load_img(img_path, target_size=(256, 256)) # this is a PIL image
     x = img_to_array(img) # this is a Numpy array with shape (3, 256, 256)
-    x = x.reshape((1,) + x.shape)/255 # this is a Numpy array with shape (1, 3, 256, 256)
-    pred = model.predict(x)
-    print "Validating that damage exists for ", image_path
-    print "Prediction ", pred
-    print "Probability that the car is damaged ", pred[0][0]
-    if pred[0][0] >.5:
+    x = x.reshape((1,) + x.shape)/255
+    return x
+
+def car_damage_gate(img_path, model):
+    print "Validating that damage exists..."
+    img_256 = prepare_img_256(img_path)
+    pred = model.predict(img_256)
+    if pred[0][0] <=.5:
         print "Validation complete - proceed to location and severity determination"
+    	return True
     else:
         print "Are you sure that your car is damaged? Please submit another picture of the damage."
         print "Hint: Try zooming in/out, using a different angle or different lighting"
+        return False
 
 
+
+
+
+
+
+get_available_gpus()
 
 datagen = ImageDataGenerator(rotation_range=40,
                              width_shift_range=0.2,
@@ -365,9 +381,6 @@ datagen = ImageDataGenerator(rotation_range=40,
                              horizontal_flip=True,
                              fill_mode='nearest') # omitted rescaling to keep the images displayable
 
-img = load_img('data1a/training/00-damage/0001.JPEG') # this is a PIL image
-x = img_to_array(img) # this is a Numpy array with shape (3, 150, 150)
-x = x.reshape((1,) + x.shape) # this is a Numpy array with shape (1, 3, 150, 150)
 
 # the .flow() command below generates batches of randomly transformed images
 # and saves the results to the 'preview/' directory
@@ -423,8 +436,8 @@ validation_labels = np.array([0] * validation_samples[0] +
 
 cm = evaluate_binary_model(ft_model, validation_data_dir, validation_labels)
 
-car_categories_gate('cat.jpg', ft_model)
-car_categories_gate('whole-car.jpg', ft_model)
-car_categories_gate('damaged_car.jpg', ft_model)
-car_categories_gate('damaged_car_2.jpg', ft_model)
-car_categories_gate('damaged_car_3.jpg', ft_model)
+car_damage_gate('cat.jpg', ft_model)
+car_damage_gate('whole_car.jpg', ft_model)
+car_damage_gate('damaged_car.jpg', ft_model)
+car_damage_gate('damaged_car_2.jpg', ft_model)
+car_damage_gate('damaged_car_3.jpg', ft_model)

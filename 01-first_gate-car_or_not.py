@@ -142,6 +142,9 @@ def car_categories_gate(image_path, cat_list):
             return "YES"
     return "NO"
 
+
+get_available_gpus()
+
 vgg16 = VGG16(weights='imagenet')
 vgg16.save('vgg16.h5')
 
@@ -152,7 +155,6 @@ with open('cat_counter.pk', 'rb') as f:
     cat_counter = pk.load(f)
 cat_list = [k for k, v in cat_counter.most_common()[:50]]
 
-get_available_gpus()
 print car_categories_gate('cat.jpg', cat_list)
 print car_categories_gate('whole-car.jpg', cat_list)
 print car_categories_gate('damaged_car.jpg', cat_list)

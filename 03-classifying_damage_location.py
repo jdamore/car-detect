@@ -48,6 +48,12 @@ from keras.layers import Activation, Dropout, Flatten, Dense
 from keras.utils.np_utils import to_categorical
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint, History
+from tensorflow.python.client import device_lib
+
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 # only import if using tf backend
 # import tensorflow as tf
@@ -313,19 +319,25 @@ def evaluate_categorical_model(model, directory, labels):
     return cm
 
 
-
-def view_images(img_dir, img_list):
-    for img in img_list:
-        clear_output()
-        display(Image(img_dir+img))
-        num = raw_input("c to continue, q to quit")
-        if num == 'c':
-            pass
-        else:
-            return 'Finished for now.'
+def prepare_img_256(img_path):
+    img = load_img(img_path, target_size=(256, 256)) # this is a PIL image
+    x = img_to_array(img) # this is a Numpy array with shape (3, 256, 256)
+    x = x.reshape((1,) + x.shape)/255
+    return x
 
 
-# ## Defining Inputs
+def location_assessment(img_path, model):
+	print "Determining location of damage..."
+    img_256 = prepare_img_256(img_path)
+	pred = model.predict(img_256)
+	pred_label = np.argmax(pred, axis=1)
+	d = {0: 'Front', 1: 'Rear', 2: 'Side'}
+	for key in d.iterkeys():
+		if pred_label[0] == key:
+			return d[key]
+
+
+get_available_gpus()
 
 
 # path to the model weights file
@@ -347,7 +359,6 @@ nb_validation_samples = sum(validation_samples)
 
 nb_epoch = 50
 
-
 # do not rerun!!
 if (os.path.exists(location+'bottleneck_features_train.npy') == False) or (os.path.exists(location+'bottleneck_features_validation.npy') == False):
     save_bottleneck_features(location)
@@ -358,33 +369,24 @@ ft_d2_model2 = load_model('data2a/ft_d2_model.h5')
 
 evaluate_model(ft_d2_model, validation_data_dir, validation_labels)
 
-# In[13]:
-
-
 ft_model = load_model('data2a/ft_model.h5')
-
-
-# In[15]:
 
 
 with open('data2a/top_history.txt') as f:
     top_history = json.load(f)
 
 
-# In[16]:
-
-
 with open('data2a/ft_history.txt') as f:
     ft_history = json.load(f)
-
-
-# In[20]:
 
 
 validation_labels = np.array([0] * validation_samples[0] +
                              [1] * validation_samples[1] +
                              [2] * validation_samples[2])
 
-
-
 cm = evaluate_categorical_model(ft_model, validation_data_dir, validation_labels)
+print location_assessment('cat.jpg', ft_model)
+print location_assessment('whole_car.jpg', ft_model)
+print location_assessment('damaged_car.jpg', ft_model)
+print location_assessment('damaged_car_2.jpg', ft_model)
+print location_assessment('damaged_car_3.jpg', ft_model)
